@@ -513,10 +513,5 @@
     else renderIntake();
   }
 
-  chrome.storage.local.get(['wmBisectEnabledOrigins'], (data) => {
-    const list = (data && data.wmBisectEnabledOrigins) || [];
-    if (list.includes(origin)) {
-      main();
-    }
-  });
+  main();
 })();
