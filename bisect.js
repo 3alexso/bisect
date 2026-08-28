@@ -170,7 +170,7 @@
     }
 
     function extractSha(version) {
-      const m = version.match(/^\d{8}-\d{6}-([0-9a-f]+)-/);
+      const m = version.match(/^\d{8}-\d{6}-([0-9a-f]+)(?:-|$)/);
       return m ? m[1] : version;
     }
 
@@ -197,14 +197,6 @@
       if (maxFailIdx === -1) return null;
       if (minPassIdx - maxFailIdx === 1) return { index: maxFailIdx, version: versions[maxFailIdx] };
       return null;
-    }
-
-    async function pasteToGitlabConsole(btn) {
-      window.open(GITLAB_PROJECT_URL, '_blank');
-      const ok = await copyToClipboard(SCRIPT1_SOURCE);
-      const original = 'Get list of walkme libs';
-      btn.textContent = ok ? 'Copied — paste in console!' : 'Copy failed, try again';
-      setTimeout(() => { btn.textContent = original; }, 2500);
     }
 
     function buildUrl(domain, guid, segment) {
@@ -321,6 +313,10 @@
       tr.broken-row .row-num-cell { color: #ffd6d6; }
       p { color: inherit; margin: 0 0 8px; }
       .intake { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .intake-section-title {
+        color: #999; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+        margin: 2px 0 -3px;
+      }
       .intake-btns {
         display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; padding-bottom: 2px;
       }
@@ -406,19 +402,21 @@
         </div>
         <div class="intake">
           <p>No version list loaded yet.</p>
+          <div class="intake-section-title">Snippet</div>
           <div class="intake-btns">
-            <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Get list of walkme libs</button>
-            <button id="wm-load-file">Load from file</button>
-            <button id="wm-paste-manual">Paste manually</button>
             <button id="wm-manual-snippet">Manual snippet</button>
             <button id="wm-snippet-in-page">Snippet in page</button>
+          </div>
+          <div class="intake-section-title">Add Lib versions</div>
+          <div class="intake-btns">
+            <button id="wm-load-file">Load from file</button>
+            <button id="wm-paste-manual">Paste manually</button>
           </div>
           <input type="file" id="wm-file-input" accept="application/json,.json" style="display:none;">
           <p class="intake-msg" id="wm-intake-msg"></p>
         </div>
       `;
       content.querySelector('#wm-close').onclick = () => host.remove();
-      content.querySelector('#wm-gitlab-console').onclick = (e) => pasteToGitlabConsole(e.target);
       content.querySelector('#wm-manual-snippet').onclick = () => renderInjector();
       content.querySelector('#wm-snippet-in-page').onclick = () => renderSnippetInPage();
 
@@ -605,6 +603,7 @@
           </div>
           <div class="row">
             <button id="sp-grab" class="gitlab-btn">Get list of walkme libs</button>
+            <button id="sp-skip">Skip</button>
           </div>
           <div class="msg" id="sp-msg"></div>
         </div>
@@ -612,6 +611,7 @@
 
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
+      content.querySelector('#sp-skip').onclick = () => goBack();
 
       const envEl = content.querySelector('#sp-env');
       const grabBtn = content.querySelector('#sp-grab');
@@ -646,15 +646,14 @@
               <strong id="wm-title">Lib Versions</strong>
             </div>
             <div class="header-btns">
-              <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Get list of walkme libs</button>
-              <button id="wm-reload">Reload list</button>
+              <button id="wm-reload">Reload libs</button>
               <button id="wm-collapse" class="icon-btn">▲</button>
               <button id="wm-close" class="icon-btn">✕</button>
             </div>
           </div>
           <div class="header-actions">
-            <button id="wm-reset">Reset marks</button>
-            <button id="wm-reset-lib" class="reset-lib-btn">Reset lib</button>
+            <button id="wm-reset">Clear marks</button>
+            <button id="wm-reset-lib" class="reset-lib-btn">Clear Lib</button>
           </div>
         </div>
         <div class="suggest" id="wm-suggest"></div>
@@ -674,8 +673,6 @@
       const tbody = content.querySelector('#wm-tbody');
       const titleEl = content.querySelector('#wm-title');
       const suggestEl = content.querySelector('#wm-suggest');
-
-      content.querySelector('#wm-gitlab-console').onclick = (e) => pasteToGitlabConsole(e.target);
 
       function renderTitle() {
         const passed = Object.values(status).filter(s => s === 'passed').length;
