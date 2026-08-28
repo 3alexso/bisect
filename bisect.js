@@ -503,6 +503,7 @@
           </div>
           <div class="row">
             <button id="wi-grab" class="gitlab-btn">Get list of walkme libs</button>
+            <button id="wi-next" class="apply-btn">Next</button>
           </div>
           <div class="msg" id="wi-msg"></div>
         </div>
@@ -510,6 +511,7 @@
 
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
+      content.querySelector('#wi-next').onclick = () => goBack();
 
       const envEl = content.querySelector('#wi-env');
       const guidEl = content.querySelector('#wi-guid');
@@ -611,7 +613,7 @@
 
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
-      content.querySelector('#sp-skip').onclick = () => goBack();
+      content.querySelector('#sp-skip').onclick = () => renderTable();
 
       const envEl = content.querySelector('#sp-env');
       const grabBtn = content.querySelector('#sp-grab');
@@ -639,6 +641,7 @@
     }
 
     function renderTable() {
+      if (!Array.isArray(versions)) versions = [];
       content.innerHTML = `
         <div class="header" id="wm-header">
           <div class="header-top">
@@ -690,6 +693,7 @@
             <div class="btn-group">
               <button id="wm-broken-copy">Copy SHA</button>
               <button id="wm-broken-goto">Broken commit</button>
+              <button id="wm-broken-clear-all">Clear all</button>
             </div>
           `;
           suggestEl.querySelector('#wm-broken-copy').onclick = async (e) => {
@@ -699,6 +703,19 @@
           };
           suggestEl.querySelector('#wm-broken-goto').onclick = () => {
             window.open(GITLAB_COMMIT_URL + sha, '_blank');
+          };
+          suggestEl.querySelector('#wm-broken-clear-all').onclick = () => {
+            if (!confirm('Clear the saved list, all pass/fail marks, and the applied lib override? This resets everything.')) return;
+            localStorage.removeItem(LIST_KEY);
+            localStorage.removeItem(STATUS_KEY);
+            resetLibOverride();
+            versions = null;
+            status = {};
+            if (confirm('Reload the page now so the lib override is removed from the live page too?')) {
+              location.reload();
+            } else {
+              renderIntake();
+            }
           };
           return;
         }
