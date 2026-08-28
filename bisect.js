@@ -9,77 +9,14 @@
     const GITLAB_PROJECT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/';
     const GITLAB_COMMIT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commit/';
 
-    const SCRIPT1_SOURCE = [
-      "(async () => {",
-      "  const projectPath = 'walkme/engine/player/player';",
-      "  const project = encodeURIComponent(projectPath);",
-      "  const perPage = 100;",
-      "",
-      "  // Fetch commits on develop",
-      "  const commitPages = 20; // 20 x 100 = 2000",
-      "  let commits = [];",
-      "  for (let page = 1; page <= commitPages; page++) {",
-      "    const res = await fetch(",
-      "      `https://gitlab.walkmernd.com/api/v4/projects/${project}/repository/commits?ref_name=develop&per_page=${perPage}&page=${page}`,",
-      "      { credentials: 'include' }",
-      "    );",
-      "    const batch = await res.json();",
-      "    if (!Array.isArray(batch) || batch.length === 0) break;",
-      "    commits = commits.concat(batch);",
-      "  }",
-      "",
-      "  // Fetch pipelines on develop with status=success, collect passed commit SHAs",
-      "  const passedShas = new Set();",
-      "  for (let page = 1; page <= 100; page++) {",
-      "    const res = await fetch(",
-      "      `https://gitlab.walkmernd.com/api/v4/projects/${project}/pipelines?ref=develop&status=success&per_page=${perPage}&page=${page}`,",
-      "      { credentials: 'include' }",
-      "    );",
-      "    const batch = await res.json();",
-      "    if (!Array.isArray(batch) || batch.length === 0) break;",
-      "    batch.forEach(p => passedShas.add(p.sha));",
-      "  }",
-      "",
-      "  // Keep only commits that have at least one passed pipeline",
-      "  const passedCommits = commits.filter(c => passedShas.has(c.id));",
-      "",
-      "  const pad = (n) => String(n).padStart(2, '0');",
-      "  const versions = passedCommits.map(c => {",
-      "    const d = new Date(c.committed_date);",
-      "    const Y = d.getUTCFullYear();",
-      "    const Mo = pad(d.getUTCMonth() + 1);",
-      "    const D = pad(d.getUTCDate());",
-      "    const H = pad(d.getUTCHours());",
-      "    const Mi = pad(d.getUTCMinutes());",
-      "    const S = pad(d.getUTCSeconds());",
-      "    return `${Y}${Mo}${D}-${H}${Mi}${S}-${c.short_id}-dev2`;",
-      "  });",
-      "",
-      "  const payload = JSON.stringify(versions);",
-      "  window.libVersions = versions;",
-      "",
-      "  const blob = new Blob([payload], { type: 'application/json' });",
-      "  const url = URL.createObjectURL(blob);",
-      "  const a = document.createElement('a');",
-      "  a.href = url;",
-      "  a.download = 'lib-versions.json';",
-      "  document.body.appendChild(a);",
-      "  a.click();",
-      "  document.body.removeChild(a);",
-      "  URL.revokeObjectURL(url);",
-      "  console.log(`⬇️ Downloaded lib-versions.json with ${versions.length} passed-pipeline entries (out of ${commits.length} commits scanned).`);",
-      "",
-      "  try { await navigator.clipboard.writeText(payload); console.log('Also copied to clipboard.'); }",
-      "  catch (e) { console.warn('Clipboard copy skipped:', e.name); }",
-      "})();",
-    ].join('\n');
-
     let versions = null;
     try { versions = JSON.parse(localStorage.getItem(LIST_KEY)); } catch {}
 
     const loadStatus = () => { try { return JSON.parse(localStorage.getItem(STATUS_KEY)) || {}; } catch { return {}; } };
     const saveStatus = (s) => localStorage.setItem(STATUS_KEY, JSON.stringify(s));
     let status = loadStatus();
+
+    const SCRIPT1_SOURCE = "(async () => {\n  const projectPath = 'walkme/engine/player/player';\n  const project = encodeURIComponent(projectPath);\n  const perPage = 100;\n\n  // Fetch commits on develop\n  const commitPages = 20; // 20 x 100 = 2000\n  let commits = [];\n  for (let page = 1; page <= commitPages; page++) {\n    const res = await fetch(\n      `https://gitlab.walkmernd.com/api/v4/projects/${project}/repository/commits?ref_name=develop&per_page=${perPage}&page=${page}`,\n      { credentials: 'include' }\n    );\n    const batch = await res.json();\n    if (!Array.isArray(batch) || batch.length === 0) break;\n    commits = commits.concat(batch);\n  }\n\n  // Fetch pipelines on develop with status=success, collect passed commit SHAs\n  const passedShas = new Set();\n  for (let page = 1; page <= 100; page++) {\n    const res = await fetch(\n      `https://gitlab.walkmernd.com/api/v4/projects/${project}/pipelines?ref=develop&status=success&per_page=${perPage}&page=${page}`,\n      { credentials: 'include' }\n    );\n    const batch = await res.json();\n    if (!Array.isArray(batch) || batch.length === 0) break;\n    batch.forEach(p => passedShas.add(p.sha));\n  }\n\n  // Keep only commits that have at least one passed pipeline\n  const passedCommits = commits.filter(c => passedShas.has(c.id));\n\n  const pad = (n) => String(n).padStart(2, '0');\n  const versions = passedCommits.map(c => {\n    const d = new Date(c.committed_date);\n    const Y = d.getUTCFullYear();\n    const Mo = pad(d.getUTCMonth() + 1);\n    const D = pad(d.getUTCDate());\n    const H = pad(d.getUTCHours());\n    const Mi = pad(d.getUTCMinutes());\n    const S = pad(d.getUTCSeconds());\n    return `${Y}${Mo}${D}-${H}${Mi}${S}-${c.short_id}-dev2`;\n  });\n\n  const payload = JSON.stringify(versions);\n  window.libVersions = versions;\n\n  const blob = new Blob([payload], { type: 'application/json' });\n  const url = URL.createObjectURL(blob);\n  const a = document.createElement('a');\n  a.href = url;\n  a.download = 'lib-versions.json';\n  document.body.appendChild(a);\n  a.click();\n  document.body.removeChild(a);\n  URL.revokeObjectURL(url);\n  console.log(`⬇️ Downloaded lib-versions.json with ${versions.length} passed-pipeline entries (out of ${commits.length} commits scanned).`);\n\n  try { await navigator.clipboard.writeText(payload); console.log('Also copied to clipboard.'); }\n  catch (e) { console.warn('Clipboard copy skipped:', e.name); }\n})();\n";
 
     async function copyToClipboard(text) {
       try { await navigator.clipboard.writeText(text); return true; } catch {}
@@ -142,6 +79,8 @@
       setTimeout(() => { btn.textContent = original; }, 2500);
     }
 
+    const PANEL_STYLES = ":host { all: initial; }\n* { box-sizing: border-box; font-family: Menlo, Consolas, monospace; }\n.panel {\n  width: 480px; max-height: 85vh; min-width: 320px; min-height: 160px;\n  display: flex; flex-direction: column; position: relative;\n  background: #1e1e1e; color: #eee; font-size: 12px; line-height: 1.35;\n  border: 1px solid #444; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.5);\n  overflow: hidden;\n}\n.panel.collapsed { height: auto !important; min-height: 0 !important; max-height: none !important; }\n.content { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }\n.panel.collapsed .content .scroll-area,\n.panel.collapsed .content .intake,\n.panel.collapsed .content .header-actions { display: none; }\n.header { flex: 0 0 auto; background: #111; padding: 6px 10px; border-bottom: 1px solid #444; cursor: move; }\n.header-top { display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 6px; }\n.header-top .title-group { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 auto; overflow: hidden; }\n.header-top strong { color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.header-btns { display: flex; gap: 5px; flex: 0 0 auto; }\n.header-btns button { flex-shrink: 0; }\n.header-actions { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }\nbutton {\n  all: unset;\n  background: #333; color: #eee; border: 1px solid #555;\n  border-radius: 4px; padding: 3px 7px; cursor: pointer; font-size: 11px;\n  display: inline-block; text-align: center;\n}\nbutton:hover { background: #444; }\nbutton.icon-btn { padding: 3px 8px; font-weight: 700; }\nbutton.gitlab-btn { background: #6e49cb; border-color: #7b52e0; }\nbutton.gitlab-btn:hover { background: #7b52e0; }\nbutton.apply-btn { background: #2e7d32; border-color: #388e3c; }\nbutton.apply-btn:hover { background: #388e3c; }\nbutton.reset-lib-btn { background: #8a5a00; border-color: #a56d00; }\nbutton.reset-lib-btn:hover { background: #a56d00; }\n.suggest {\n  flex: 0 0 auto; padding: 6px 10px; background: #2a2a2a; border-bottom: 1px solid #444;\n  color: #ddd; display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;\n}\n.suggest button { flex: 0 0 auto; background: #1565c0; border-color: #1976d2; }\n.suggest button:hover { background: #1976d2; }\n.suggest.broken { background: #4a1414; border-bottom-color: #b3261e; color: #ffb3b3; }\n.suggest.broken button { background: #b3261e; border-color: #d32f2f; }\n.suggest.broken button:hover { background: #d32f2f; }\n.suggest .btn-group { display: flex; gap: 5px; }\n.scroll-area { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }\ntable { width: 100%; border-collapse: separate; border-spacing: 0; }\nth {\n  text-align: left; padding: 4px 8px; background: #2a2a2a; color: #ccc;\n  position: sticky; top: 0; z-index: 1; border-bottom: 1px solid #444;\n}\ntd { padding: 3px 8px; border-bottom: 1px solid #333; color: #eee; }\n.row-num-cell { text-align: left; white-space: nowrap; color: #888; width: 2.5em; }\n.version-cell { word-break: break-all; }\n.apply-cell, .status-cell { text-align: center; white-space: nowrap; }\n.status-cell button { margin-right: 3px; opacity: 0.6; }\n.status-cell button.active { opacity: 1; }\ntr.jump-highlight { background: #ffb30055 !important; transition: background 0.3s; }\ntr.broken-row { background: #b3261e !important; }\ntr.broken-row td { color: #fff; font-weight: 600; }\ntr.broken-row .row-num-cell { color: #ffd6d6; }\np { color: inherit; margin: 0 0 8px; }\n.intake { padding: 12px; }\n.intake-msg { margin-top: 8px; color: #f66; }\n.resize-handle {\n  position: absolute; left: 0; bottom: 0; width: 14px; height: 14px;\n  cursor: nesw-resize;\n  background: linear-gradient(45deg, transparent 0 40%, #777 40% 55%, transparent 55% 70%, #777 70% 85%, transparent 85% 100%);\n}\n";
+
     const host = document.createElement('div');
     host.id = HOST_ID;
     host.style.all = 'initial';
@@ -154,77 +93,7 @@
     const shadow = host.attachShadow({ mode: 'open' });
 
     const style = document.createElement('style');
-    style.textContent = `
-      :host { all: initial; }
-      * { box-sizing: border-box; font-family: Menlo, Consolas, monospace; }
-      .panel {
-        width: 480px; max-height: 85vh; min-width: 320px; min-height: 160px;
-        display: flex; flex-direction: column; position: relative;
-        background: #1e1e1e; color: #eee; font-size: 12px; line-height: 1.35;
-        border: 1px solid #444; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.5);
-        overflow: hidden;
-      }
-      .panel.collapsed { height: auto !important; min-height: 0 !important; max-height: none !important; }
-      .content { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-      .panel.collapsed .content .scroll-area,
-      .panel.collapsed .content .intake,
-      .panel.collapsed .content .header-actions { display: none; }
-      .header { flex: 0 0 auto; background: #111; padding: 6px 10px; border-bottom: 1px solid #444; cursor: move; }
-      .header-top { display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 6px; }
-      .header-top .title-group { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
-      .header-top strong { color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .header-btns { display: flex; gap: 5px; flex: 0 0 auto; }
-      .header-btns button { flex-shrink: 0; }
-      .header-actions { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
-      button {
-        all: unset;
-        background: #333; color: #eee; border: 1px solid #555;
-        border-radius: 4px; padding: 3px 7px; cursor: pointer; font-size: 11px;
-        display: inline-block; text-align: center;
-      }
-      button:hover { background: #444; }
-      button.icon-btn { padding: 3px 8px; font-weight: 700; }
-      button.gitlab-btn { background: #6e49cb; border-color: #7b52e0; }
-      button.gitlab-btn:hover { background: #7b52e0; }
-      button.apply-btn { background: #2e7d32; border-color: #388e3c; }
-      button.apply-btn:hover { background: #388e3c; }
-      button.reset-lib-btn { background: #8a5a00; border-color: #a56d00; }
-      button.reset-lib-btn:hover { background: #a56d00; }
-      .suggest {
-        flex: 0 0 auto; padding: 6px 10px; background: #2a2a2a; border-bottom: 1px solid #444;
-        color: #ddd; display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;
-      }
-      .suggest button { flex: 0 0 auto; background: #1565c0; border-color: #1976d2; }
-      .suggest button:hover { background: #1976d2; }
-      .suggest.broken { background: #4a1414; border-bottom-color: #b3261e; color: #ffb3b3; }
-      .suggest.broken button { background: #b3261e; border-color: #d32f2f; }
-      .suggest.broken button:hover { background: #d32f2f; }
-      .suggest .btn-group { display: flex; gap: 5px; }
-      .scroll-area { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-      table { width: 100%; border-collapse: separate; border-spacing: 0; }
-      th {
-        text-align: left; padding: 4px 8px; background: #2a2a2a; color: #ccc;
-        position: sticky; top: 0; z-index: 1; border-bottom: 1px solid #444;
-      }
-      td { padding: 3px 8px; border-bottom: 1px solid #333; color: #eee; }
-      .row-num-cell { text-align: left; white-space: nowrap; color: #888; width: 2.5em; }
-      .version-cell { word-break: break-all; }
-      .apply-cell, .status-cell { text-align: center; white-space: nowrap; }
-      .status-cell button { margin-right: 3px; opacity: 0.6; }
-      .status-cell button.active { opacity: 1; }
-      tr.jump-highlight { background: #ffb30055 !important; transition: background 0.3s; }
-      tr.broken-row { background: #b3261e !important; }
-      tr.broken-row td { color: #fff; font-weight: 600; }
-      tr.broken-row .row-num-cell { color: #ffd6d6; }
-      p { color: inherit; margin: 0 0 8px; }
-      .intake { padding: 12px; }
-      .intake-msg { margin-top: 8px; color: #f66; }
-      .resize-handle {
-        position: absolute; left: 0; bottom: 0; width: 14px; height: 14px;
-        cursor: nesw-resize;
-        background: linear-gradient(45deg, transparent 0 40%, #777 40% 55%, transparent 55% 70%, #777 70% 85%, transparent 85% 100%);
-      }
-    `;
+    style.textContent = PANEL_STYLES;
     shadow.appendChild(style);
 
     const panel = document.createElement('div');
