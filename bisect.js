@@ -8,8 +8,7 @@
     const STATUS_KEY = 'wm_libVersionStatus_v1';
     const GITLAB_PROJECT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/';
     const GITLAB_COMMIT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commit/';
-    const WALKME_INJECTOR_SOURCE = "(() => {\n  const HOST_ID = 'wm-injector-host';\n  document.getElementById(HOST_ID)?.remove();\n\n  const QA_DEPLOY_HISTORY_URL = 'https://eux-prod.walkmernd.com/playerDeployment/deployHistory';\n  const GITLAB_PROJECT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/';\n\n  const SCRIPT1_SOURCE = [\n    \"(async () => {\",\n    \"  const projectPath = 'walkme/engine/player/player';\",\n    \"  const project = encodeURIComponent(projectPath);\",\n    \"  const perPage = 100;\",\n    \"\",\n    \"  // Fetch commits on develop\",\n    \"  const commitPages = 20; // 20 x 100 = 2000\",\n    \"  let commits = [];\",\n    \"  for (let page = 1; page <= commitPages; page++) {\",\n    \"    const res = await fetch(\",\n    \"      `https://gitlab.walkmernd.com/api/v4/projects/${project}/repository/commits?ref_name=develop&per_page=${perPage}&page=${page}`,\",\n    \"      { credentials: 'include' }\",\n    \"    );\",\n    \"    const batch = await res.json();\",\n    \"    if (!Array.isArray(batch) || batch.length === 0) break;\",\n    \"    commits = commits.concat(batch);\",\n    \"  }\",\n    \"\",\n    \"  // Fetch pipelines on develop with status=success, collect passed commit SHAs\",\n    \"  const passedShas = new Set();\",\n    \"  for (let page = 1; page <= 100; page++) {\",\n    \"    const res = await fetch(\",\n    \"      `https://gitlab.walkmernd.com/api/v4/projects/${project}/pipelines?ref=develop&status=success&per_page=${perPage}&page=${page}`,\",\n    \"      { credentials: 'include' }\",\n    \"    );\",\n    \"    const batch = await res.json();\",\n    \"    if (!Array.isArray(batch) || batch.length === 0) break;\",\n    \"    batch.forEach(p => passedShas.add(p.sha));\",\n    \"  }\",\n    \"\",\n    \"  // Keep only commits that have at least one passed pipeline\",\n    \"  const passedCommits = commits.filter(c => passedShas.has(c.id));\",\n    \"\",\n    \"  const pad = (n) => String(n).padStart(2, '0');\",\n    \"  const versions = passedCommits.map(c => {\",\n    \"    const d = new Date(c.committed_date);\",\n    \"    const Y = d.getUTCFullYear();\",\n    \"    const Mo = pad(d.getUTCMonth() + 1);\",\n    \"    const D = pad(d.getUTCDate());\",\n    \"    const H = pad(d.getUTCHours());\",\n    \"    const Mi = pad(d.getUTCMinutes());\",\n    \"    const S = pad(d.getUTCSeconds());\",\n    \"    return `${Y}${Mo}${D}-${H}${Mi}${S}-${c.short_id}-dev2`;\",\n    \"  });\",\n    \"\",\n    \"  const payload = JSON.stringify(versions);\",\n    \"  window.libVersions = versions;\",\n    \"\",\n    \"  const blob = new Blob([payload], { type: 'application/json' });\",\n    \"  const url = URL.createObjectURL(blob);\",\n    \"  const a = document.createElement('a');\",\n    \"  a.href = url;\",\n    \"  a.download = 'lib-versions.json';\",\n    \"  document.body.appendChild(a);\",\n    \"  a.click();\",\n    \"  document.body.removeChild(a);\",\n    \"  URL.revokeObjectURL(url);\",\n    \"  console.log(`\u2b07\ufe0f Downloaded lib-versions.json with ${versions.length} passed-pipeline entries (out of ${commits.length} commits scanned).`);\",\n    \"\",\n    \"  try { await navigator.clipboard.writeText(payload); console.log('Also copied to clipboard.'); }\",\n    \"  catch (e) { console.warn('Clipboard copy skipped:', e.name); }\",\n    \"})();\",\n  ].join('\\n');\n\n  const SCRIPT2_QA_SOURCE = [\n    \"(function() {\",\n    \"  const versionRe = /^\\\\d{8}-\\\\d{6}-[0-9a-f]+$/i;\",\n    \"  const rows = Array.from(document.querySelectorAll('table tr'));\",\n    \"  const seen = new Set();\",\n    \"  const versions = [];\",\n    \"\",\n    \"  rows.forEach(row => {\",\n    \"    const cells = Array.from(row.querySelectorAll('td, th')).map(c => c.textContent.trim());\",\n    \"    if (!cells.length) return;\",\n    \"    const version = cells[0];\",\n    \"    const branch = (cells[1] || '').toLowerCase();\",\n    \"    if (versionRe.test(version) && (!branch || branch === 'qa') && !seen.has(version)) {\",\n    \"      seen.add(version);\",\n    \"      versions.push(version);\",\n    \"    }\",\n    \"  });\",\n    \"\",\n    \"  const payload = JSON.stringify(versions);\",\n    \"  window.libVersionsQA = versions;\",\n    \"\",\n    \"  const blob = new Blob([payload], { type: 'application/json' });\",\n    \"  const url = URL.createObjectURL(blob);\",\n    \"  const a = document.createElement('a');\",\n    \"  a.href = url;\",\n    \"  a.download = 'lib-versions-qa.json';\",\n    \"  document.body.appendChild(a);\",\n    \"  a.click();\",\n    \"  document.body.removeChild(a);\",\n    \"  URL.revokeObjectURL(url);\",\n    \"  console.log(`\u2b07\ufe0f Downloaded lib-versions-qa.json with ${versions.length} entries (only rows currently rendered in the table are scanned).`);\",\n    \"\",\n    \"  navigator.clipboard.writeText(payload)\",\n    \"    .then(() => console.log('Also copied to clipboard.'))\",\n    \"    .catch(e => console.warn('Clipboard copy skipped:', e.name));\",\n    \"})();\",\n  ].join('\\n');\n\n  async function copyToClipboard(text) {\n    try { await navigator.clipboard.writeText(text); return true; } catch {}\n    try {\n      const ta = document.createElement('textarea');\n      ta.value = text;\n      ta.style.position = 'fixed'; ta.style.left = '-9999px';\n      document.body.appendChild(ta); ta.focus(); ta.select();\n      const ok = document.execCommand('copy');\n      document.body.removeChild(ta);\n      return ok;\n    } catch { return false; }\n  }\n\n  function buildUrl(domain, guid, segment) {\n    const seg = segment ? `${segment}/` : '';\n    return `https://${domain}/users/${guid}/${seg}walkme_${guid}_https.js`;\n  }\n\n  function buildSnippet(url) {\n    return `(function() {var walkme = document.createElement('script'); walkme.type = 'text/javascript'; walkme.async = true; walkme.src = '${url}'; var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(walkme, s); window._walkmeConfig = {smartLoad:true}; })();`;\n  }\n\n  function injectSnippet(url) {\n    const walkme = document.createElement('script');\n    walkme.type = 'text/javascript';\n    walkme.async = true;\n    walkme.src = url;\n    const s = document.getElementsByTagName('script')[0];\n    s.parentNode.insertBefore(walkme, s);\n    window._walkmeConfig = { smartLoad: true };\n  }\n\n  const host = document.createElement('div');\n  host.id = HOST_ID;\n  host.style.all = 'initial';\n  host.style.position = 'fixed';\n  host.style.top = '20px';\n  host.style.left = '20px';\n  host.style.zIndex = '2147483647';\n  document.body.appendChild(host);\n\n  const shadow = host.attachShadow({ mode: 'open' });\n\n  const style = document.createElement('style');\n  style.textContent = `\n    :host { all: initial; }\n    * { box-sizing: border-box; font-family: Menlo, Consolas, monospace; }\n    .panel {\n      width: 420px; max-height: 85vh; overflow-y: auto;\n      background: #1e1e1e; color: #eee; font-size: 12px; line-height: 1.4;\n      border: 1px solid #444; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.5);\n    }\n    .header {\n      background: #111; padding: 8px 10px; border-bottom: 1px solid #444;\n      display: flex; justify-content: space-between; align-items: center; cursor: move;\n    }\n    .header strong { color: #fff; }\n    .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }\n    label { display: block; color: #aaa; margin-bottom: 3px; }\n    select, input[type=\"text\"] {\n      width: 100%; background: #2a2a2a; color: #eee; border: 1px solid #555;\n      border-radius: 4px; padding: 5px 6px; font-size: 12px;\n    }\n    button {\n      all: unset; background: #333; color: #eee; border: 1px solid #555;\n      border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px;\n      display: inline-block; text-align: center;\n    }\n    button:hover { background: #444; }\n    button.icon-btn { padding: 3px 8px; font-weight: 700; }\n    button.primary { background: #2e7d32; border-color: #388e3c; }\n    button.primary:hover { background: #388e3c; }\n    button.gitlab-btn { background: #6e49cb; border-color: #7b52e0; }\n    button.gitlab-btn:hover { background: #7b52e0; }\n    .row { display: flex; gap: 6px; }\n    .preview {\n      background: #111; border: 1px solid #333; border-radius: 4px; padding: 6px;\n      word-break: break-all; color: #9cdcfe; max-height: 90px; overflow-y: auto;\n    }\n    .msg { color: #6ab04c; min-height: 14px; }\n    .hidden { display: none; }\n  `;\n  shadow.appendChild(style);\n\n  const panel = document.createElement('div');\n  panel.className = 'panel';\n  panel.innerHTML = `\n    <div class=\"header\" id=\"wi-header\">\n      <strong>WalkMe Injector</strong>\n      <button id=\"wi-close\" class=\"icon-btn\">\u2715</button>\n    </div>\n    <div class=\"body\">\n      <div>\n        <label>Environment</label>\n        <select id=\"wi-env\">\n          <option value=\"cdn.walkme.com\">Prod US (cdn.walkme.com)</option>\n          <option value=\"cdn.walkmeqa.com\">QA (cdn.walkmeqa.com)</option>\n        </select>\n      </div>\n      <div>\n        <label>User GUID</label>\n        <input type=\"text\" id=\"wi-guid\" placeholder=\"e.g. 7cdf0e5eb1974f5b986ab39ee34c52cf\">\n      </div>\n      <div>\n        <label>Path</label>\n        <select id=\"wi-segment\">\n          <option value=\"\">Production</option>\n          <option value=\"test\" selected>Test</option>\n          <option value=\"success\">Success</option>\n          <option value=\"custom\">Custom</option>\n        </select>\n      </div>\n      <div id=\"wi-custom-wrap\" class=\"hidden\">\n        <label>Custom path segment</label>\n        <input type=\"text\" id=\"wi-custom\" placeholder=\"e.g. staging\">\n      </div>\n      <div>\n        <label>Preview</label>\n        <div class=\"preview\" id=\"wi-preview\">\u2014</div>\n      </div>\n      <div class=\"row\">\n        <button id=\"wi-inject\" class=\"primary\">Inject now</button>\n        <button id=\"wi-copy\">Copy script</button>\n      </div>\n      <div class=\"row\">\n        <button id=\"wi-grab\" class=\"gitlab-btn\">Grab libs</button>\n      </div>\n      <div class=\"msg\" id=\"wi-msg\"></div>\n    </div>\n  `;\n  shadow.appendChild(panel);\n\n  const envEl = panel.querySelector('#wi-env');\n  const guidEl = panel.querySelector('#wi-guid');\n  const segmentEl = panel.querySelector('#wi-segment');\n  const customWrapEl = panel.querySelector('#wi-custom-wrap');\n  const customEl = panel.querySelector('#wi-custom');\n  const previewEl = panel.querySelector('#wi-preview');\n  const msgEl = panel.querySelector('#wi-msg');\n  const grabBtn = panel.querySelector('#wi-grab');\n\n  function currentSegment() {\n    if (segmentEl.value === 'custom') return customEl.value.trim();\n    return segmentEl.value;\n  }\n\n  function currentUrl() {\n    const guid = guidEl.value.trim();\n    if (!guid) return null;\n    return buildUrl(envEl.value, guid, currentSegment());\n  }\n\n  function updatePreview() {\n    const url = currentUrl();\n    if (!url) {\n      previewEl.textContent = 'Enter a GUID to preview the script.';\n      return;\n    }\n    previewEl.textContent = buildSnippet(url);\n  }\n\n  function updateSegmentVisibility() {\n    customWrapEl.classList.toggle('hidden', segmentEl.value !== 'custom');\n  }\n\n  envEl.onchange = updatePreview;\n  guidEl.oninput = updatePreview;\n  segmentEl.onchange = () => { updateSegmentVisibility(); updatePreview(); };\n  customEl.oninput = updatePreview;\n\n  updateSegmentVisibility();\n  updatePreview();\n\n  panel.querySelector('#wi-close').onclick = () => host.remove();\n\n  panel.querySelector('#wi-inject').onclick = () => {\n    const url = currentUrl();\n    if (!url) { msgEl.textContent = 'Enter a GUID first.'; msgEl.style.color = '#e05252'; return; }\n    injectSnippet(url);\n    msgEl.style.color = '#6ab04c';\n    msgEl.textContent = 'Injected \u2014 script tag added to the page.';\n  };\n\n  panel.querySelector('#wi-copy').onclick = async () => {\n    const url = currentUrl();\n    if (!url) { msgEl.textContent = 'Enter a GUID first.'; msgEl.style.color = '#e05252'; return; }\n    const ok = await copyToClipboard(buildSnippet(url));\n    msgEl.style.color = ok ? '#6ab04c' : '#e05252';\n    msgEl.textContent = ok ? 'Copied to clipboard.' : 'Copy failed \u2014 check clipboard permissions.';\n  };\n\n  grabBtn.onclick = async () => {\n    if (envEl.value === 'cdn.walkme.com') {\n      window.open(GITLAB_PROJECT_URL, '_blank');\n      const ok = await copyToClipboard(SCRIPT1_SOURCE);\n      grabBtn.textContent = ok ? 'Copied \u2014 paste in GitLab console!' : 'Copy failed, try again';\n    } else {\n      window.open(QA_DEPLOY_HISTORY_URL, '_blank');\n      const ok = await copyToClipboard(SCRIPT2_QA_SOURCE);\n      grabBtn.textContent = ok ? 'Copied \u2014 paste in deploy history console!' : 'Copy failed, try again';\n    }\n    setTimeout(() => { grabBtn.textContent = 'Grab libs'; }, 3000);\n  };\n\n  let dragOffset = null;\n  const header = panel.querySelector('#wi-header');\n  header.onmousedown = (e) => {\n    if (e.target.closest('button')) return;\n    dragOffset = { x: e.clientX - host.offsetLeft, y: e.clientY - host.offsetTop };\n  };\n  document.addEventListener('mousemove', (e) => {\n    if (!dragOffset) return;\n    host.style.left = (e.clientX - dragOffset.x) + 'px';\n    host.style.top = (e.clientY - dragOffset.y) + 'px';\n  });\n  document.addEventListener('mouseup', () => { dragOffset = null; });\n})();\n";
-
+    const QA_DEPLOY_HISTORY_URL = 'https://eux-prod.walkmernd.com/playerDeployment/deployHistory';
     const SCRIPT1_SOURCE = [
       "(async () => {",
       "  const projectPath = 'walkme/engine/player/player';",
@@ -72,6 +71,44 @@
       "",
       "  try { await navigator.clipboard.writeText(payload); console.log('Also copied to clipboard.'); }",
       "  catch (e) { console.warn('Clipboard copy skipped:', e.name); }",
+      "})();",
+    ].join('\n');
+
+    const SCRIPT2_QA_SOURCE = [
+      "(function() {",
+      "  const versionRe = /^\\d{8}-\\d{6}-[0-9a-f]+$/i;",
+      "  const rows = Array.from(document.querySelectorAll('table tr'));",
+      "  const seen = new Set();",
+      "  const versions = [];",
+      "",
+      "  rows.forEach(row => {",
+      "    const cells = Array.from(row.querySelectorAll('td, th')).map(c => c.textContent.trim());",
+      "    if (!cells.length) return;",
+      "    const version = cells[0];",
+      "    const branch = (cells[1] || '').toLowerCase();",
+      "    if (versionRe.test(version) && (!branch || branch === 'qa') && !seen.has(version)) {",
+      "      seen.add(version);",
+      "      versions.push(version);",
+      "    }",
+      "  });",
+      "",
+      "  const payload = JSON.stringify(versions);",
+      "  window.libVersionsQA = versions;",
+      "",
+      "  const blob = new Blob([payload], { type: 'application/json' });",
+      "  const url = URL.createObjectURL(blob);",
+      "  const a = document.createElement('a');",
+      "  a.href = url;",
+      "  a.download = 'lib-versions-qa.json';",
+      "  document.body.appendChild(a);",
+      "  a.click();",
+      "  document.body.removeChild(a);",
+      "  URL.revokeObjectURL(url);",
+      "  console.log(`⬇️ Downloaded lib-versions-qa.json with ${versions.length} entries (only rows currently rendered in the table are scanned).`);",
+      "",
+      "  navigator.clipboard.writeText(payload)",
+      "    .then(() => console.log('Also copied to clipboard.'))",
+      "    .catch(e => console.warn('Clipboard copy skipped:', e.name));",
       "})();",
     ].join('\n');
 
@@ -138,16 +175,33 @@
     async function pasteToGitlabConsole(btn) {
       window.open(GITLAB_PROJECT_URL, '_blank');
       const ok = await copyToClipboard(SCRIPT1_SOURCE);
-      const original = 'Grab libs';
+      const original = 'Get list of walkme libs';
       btn.textContent = ok ? 'Copied — paste in console!' : 'Copy failed, try again';
       setTimeout(() => { btn.textContent = original; }, 2500);
     }
 
-    async function copyInjectorScript(btn) {
-      const ok = await copyToClipboard(WALKME_INJECTOR_SOURCE);
-      const original = 'Injector';
-      btn.textContent = ok ? 'Copied — paste in this console!' : 'Copy failed, try again';
-      setTimeout(() => { btn.textContent = original; }, 2500);
+    function buildUrl(domain, guid, segment) {
+      const seg = segment ? `${segment}/` : '';
+      return `https://${domain}/users/${guid}/${seg}walkme_${guid}_https.js`;
+    }
+
+    function buildSnippet(url) {
+      return `(function() {var walkme = document.createElement('script'); walkme.type = 'text/javascript'; walkme.async = true; walkme.src = '${url}'; var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(walkme, s); window._walkmeConfig = {smartLoad:true}; })();`;
+    }
+
+    function injectSnippet(url) {
+      const walkme = document.createElement('script');
+      walkme.type = 'text/javascript';
+      walkme.async = true;
+      walkme.src = url;
+      const s = document.getElementsByTagName('script')[0];
+      s.parentNode.insertBefore(walkme, s);
+      window._walkmeConfig = { smartLoad: true };
+    }
+
+    function goBack() {
+      if (Array.isArray(versions) && versions.length) renderTable();
+      else renderIntake();
     }
 
     const host = document.createElement('div');
@@ -176,6 +230,7 @@
       .content { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
       .panel.collapsed .content .scroll-area,
       .panel.collapsed .content .intake,
+      .panel.collapsed .content .injector-body,
       .panel.collapsed .content .header-actions { display: none; }
       .header { flex: 0 0 auto; background: #111; padding: 6px 10px; border-bottom: 1px solid #444; cursor: move; }
       .header-top { display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 6px; }
@@ -198,6 +253,19 @@
       button.apply-btn:hover { background: #388e3c; }
       button.reset-lib-btn { background: #8a5a00; border-color: #a56d00; }
       button.reset-lib-btn:hover { background: #a56d00; }
+      .injector-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+      .injector-body label { display: block; color: #aaa; margin-bottom: 3px; }
+      .injector-body select, .injector-body input[type="text"] {
+        width: 100%; background: #2a2a2a; color: #eee; border: 1px solid #555;
+        border-radius: 4px; padding: 5px 6px; font-size: 12px;
+      }
+      .injector-body .row { display: flex; gap: 6px; }
+      .injector-body .preview {
+        background: #111; border: 1px solid #333; border-radius: 4px; padding: 6px;
+        word-break: break-all; color: #9cdcfe; max-height: 90px; overflow-y: auto;
+      }
+      .injector-body .msg { color: #6ab04c; min-height: 14px; }
+      .hidden { display: none; }
       .suggest {
         flex: 0 0 auto; padding: 6px 10px; background: #2a2a2a; border-bottom: 1px solid #444;
         color: #ddd; display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;
@@ -307,15 +375,19 @@
         </div>
         <div class="intake">
           <p>No version list loaded yet.</p>
-          <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Grab libs</button>
+          <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Get list of walkme libs</button>
           <button id="wm-load-file">Load from file</button>
           <button id="wm-paste-manual">Paste manually</button>
+          <button id="wm-manual-snippet">Manual snippet</button>
+          <button id="wm-snippet-in-page">Snippet in page</button>
           <input type="file" id="wm-file-input" accept="application/json,.json" style="display:none;">
           <p class="intake-msg" id="wm-intake-msg"></p>
         </div>
       `;
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-gitlab-console').onclick = (e) => pasteToGitlabConsole(e.target);
+      content.querySelector('#wm-manual-snippet').onclick = () => renderInjector();
+      content.querySelector('#wm-snippet-in-page').onclick = () => renderSnippetInPage();
 
       const fileInput = content.querySelector('#wm-file-input');
       content.querySelector('#wm-load-file').onclick = () => fileInput.click();
@@ -353,6 +425,186 @@
       attachCollapse();
     }
 
+    function renderInjector() {
+      content.innerHTML = `
+        <div class="header" id="wm-header">
+          <div class="header-top">
+            <div class="title-group"><strong>Manual Snippet</strong></div>
+            <div class="header-btns">
+              <button id="wm-back">&larr; Back</button>
+              <button id="wm-collapse" class="icon-btn">▲</button>
+              <button id="wm-close" class="icon-btn">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="injector-body">
+          <div>
+            <label>Environment</label>
+            <select id="wi-env">
+              <option value="cdn.walkme.com">Prod US (cdn.walkme.com)</option>
+              <option value="cdn.walkmeqa.com">QA (cdn.walkmeqa.com)</option>
+            </select>
+          </div>
+          <div>
+            <label>User GUID</label>
+            <input type="text" id="wi-guid" placeholder="e.g. 7cdf0e5eb1974f5b986ab39ee34c52cf">
+          </div>
+          <div>
+            <label>Path</label>
+            <select id="wi-segment">
+              <option value="">Production</option>
+              <option value="test" selected>Test</option>
+              <option value="success">Success</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div id="wi-custom-wrap" class="hidden">
+            <label>Custom path segment</label>
+            <input type="text" id="wi-custom" placeholder="e.g. staging">
+          </div>
+          <div>
+            <label>Preview</label>
+            <div class="preview" id="wi-preview">—</div>
+          </div>
+          <div class="row">
+            <button id="wi-inject" class="apply-btn">Inject now</button>
+            <button id="wi-copy">Copy script</button>
+          </div>
+          <div class="row">
+            <button id="wi-grab" class="gitlab-btn">Get list of walkme libs</button>
+          </div>
+          <div class="msg" id="wi-msg"></div>
+        </div>
+      `;
+
+      content.querySelector('#wm-close').onclick = () => host.remove();
+      content.querySelector('#wm-back').onclick = () => goBack();
+
+      const envEl = content.querySelector('#wi-env');
+      const guidEl = content.querySelector('#wi-guid');
+      const segmentEl = content.querySelector('#wi-segment');
+      const customWrapEl = content.querySelector('#wi-custom-wrap');
+      const customEl = content.querySelector('#wi-custom');
+      const previewEl = content.querySelector('#wi-preview');
+      const msgEl = content.querySelector('#wi-msg');
+      const grabBtn = content.querySelector('#wi-grab');
+
+      function currentSegment() {
+        if (segmentEl.value === 'custom') return customEl.value.trim();
+        return segmentEl.value;
+      }
+
+      function currentUrl() {
+        const guid = guidEl.value.trim();
+        if (!guid) return null;
+        return buildUrl(envEl.value, guid, currentSegment());
+      }
+
+      function updatePreview() {
+        const url = currentUrl();
+        previewEl.textContent = url ? buildSnippet(url) : 'Enter a GUID to preview the script.';
+      }
+
+      function updateSegmentVisibility() {
+        customWrapEl.classList.toggle('hidden', segmentEl.value !== 'custom');
+      }
+
+      envEl.onchange = updatePreview;
+      guidEl.oninput = updatePreview;
+      segmentEl.onchange = () => { updateSegmentVisibility(); updatePreview(); };
+      customEl.oninput = updatePreview;
+
+      updateSegmentVisibility();
+      updatePreview();
+
+      content.querySelector('#wi-inject').onclick = () => {
+        const url = currentUrl();
+        if (!url) { msgEl.style.color = '#e05252'; msgEl.textContent = 'Enter a GUID first.'; return; }
+        injectSnippet(url);
+        msgEl.style.color = '#6ab04c';
+        msgEl.textContent = 'Injected — script tag added to the page.';
+      };
+
+      content.querySelector('#wi-copy').onclick = async () => {
+        const url = currentUrl();
+        if (!url) { msgEl.style.color = '#e05252'; msgEl.textContent = 'Enter a GUID first.'; return; }
+        const ok = await copyToClipboard(buildSnippet(url));
+        msgEl.style.color = ok ? '#6ab04c' : '#e05252';
+        msgEl.textContent = ok ? 'Copied to clipboard.' : 'Copy failed — check clipboard permissions.';
+      };
+
+      grabBtn.onclick = async () => {
+        if (envEl.value === 'cdn.walkme.com') {
+          window.open(GITLAB_PROJECT_URL, '_blank');
+          const ok = await copyToClipboard(SCRIPT1_SOURCE);
+          grabBtn.textContent = ok ? 'Copied — paste in GitLab console!' : 'Copy failed, try again';
+        } else {
+          window.open(QA_DEPLOY_HISTORY_URL, '_blank');
+          const ok = await copyToClipboard(SCRIPT2_QA_SOURCE);
+          grabBtn.textContent = ok ? 'Copied — paste in deploy history console!' : 'Copy failed, try again';
+        }
+        setTimeout(() => { grabBtn.textContent = 'Get list of walkme libs'; }, 3000);
+      };
+
+      attachDrag();
+      attachCollapse();
+    }
+
+    function renderSnippetInPage() {
+      content.innerHTML = `
+        <div class="header" id="wm-header">
+          <div class="header-top">
+            <div class="title-group"><strong>Snippet in Page</strong></div>
+            <div class="header-btns">
+              <button id="wm-back">&larr; Back</button>
+              <button id="wm-collapse" class="icon-btn">▲</button>
+              <button id="wm-close" class="icon-btn">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="injector-body">
+          <div>
+            <label>Environment</label>
+            <select id="sp-env">
+              <option value="cdn.walkme.com">Prod US (cdn.walkme.com)</option>
+              <option value="cdn.walkmeqa.com">QA (cdn.walkmeqa.com)</option>
+            </select>
+          </div>
+          <div class="row">
+            <button id="sp-grab" class="gitlab-btn">Get list of walkme libs</button>
+          </div>
+          <div class="msg" id="sp-msg"></div>
+        </div>
+      `;
+
+      content.querySelector('#wm-close').onclick = () => host.remove();
+      content.querySelector('#wm-back').onclick = () => goBack();
+
+      const envEl = content.querySelector('#sp-env');
+      const grabBtn = content.querySelector('#sp-grab');
+      const msgEl = content.querySelector('#sp-msg');
+
+      grabBtn.onclick = async () => {
+        if (envEl.value === 'cdn.walkme.com') {
+          window.open(GITLAB_PROJECT_URL, '_blank');
+          const ok = await copyToClipboard(SCRIPT1_SOURCE);
+          grabBtn.textContent = ok ? 'Copied — paste in GitLab console!' : 'Copy failed, try again';
+          msgEl.style.color = ok ? '#6ab04c' : '#e05252';
+          msgEl.textContent = ok ? '' : 'Clipboard copy failed — check permissions.';
+        } else {
+          window.open(QA_DEPLOY_HISTORY_URL, '_blank');
+          const ok = await copyToClipboard(SCRIPT2_QA_SOURCE);
+          grabBtn.textContent = ok ? 'Copied — paste in deploy history console!' : 'Copy failed, try again';
+          msgEl.style.color = ok ? '#6ab04c' : '#e05252';
+          msgEl.textContent = ok ? '' : 'Clipboard copy failed — check permissions.';
+        }
+        setTimeout(() => { grabBtn.textContent = 'Get list of walkme libs'; }, 3000);
+      };
+
+      attachDrag();
+      attachCollapse();
+    }
+
     function renderTable() {
       content.innerHTML = `
         <div class="header" id="wm-header">
@@ -361,7 +613,7 @@
               <strong id="wm-title">Lib Versions</strong>
             </div>
             <div class="header-btns">
-              <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Grab libs</button>
+              <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Get list of walkme libs</button>
               <button id="wm-reload">Reload list</button>
               <button id="wm-collapse" class="icon-btn">▲</button>
               <button id="wm-close" class="icon-btn">✕</button>
@@ -370,7 +622,6 @@
           <div class="header-actions">
             <button id="wm-reset">Reset marks</button>
             <button id="wm-reset-lib" class="reset-lib-btn">Reset lib</button>
-            <button id="wm-injector" class="gitlab-btn" title="Paste to devtools to open the WalkMe Injector panel">Injector</button>
           </div>
         </div>
         <div class="suggest" id="wm-suggest"></div>
@@ -392,7 +643,6 @@
       const suggestEl = content.querySelector('#wm-suggest');
 
       content.querySelector('#wm-gitlab-console').onclick = (e) => pasteToGitlabConsole(e.target);
-      content.querySelector('#wm-injector').onclick = (e) => copyInjectorScript(e.target);
 
       function renderTitle() {
         const passed = Object.values(status).filter(s => s === 'passed').length;
