@@ -8,7 +8,7 @@
     const STATUS_KEY = 'wm_libVersionStatus_v1';
     const GITLAB_PROJECT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/';
     const GITLAB_COMMIT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commit/';
-    const QA_DEPLOY_HISTORY_URL = 'https://eux-prod.walkmernd.com/playerDeployment/deployHistory';
+    const GITLAB_QA_COMMITS_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commits/qa?ref_type=heads';
     const SCRIPT1_SOURCE = [
       "(async () => {",
       "  const projectPath = 'walkme/engine/player/player';",
@@ -75,21 +75,49 @@
     ].join('\n');
 
     const SCRIPT2_QA_SOURCE = [
-      "(function() {",
-      "  const versionRe = /^\\d{8}-\\d{6}-[0-9a-f]+$/i;",
-      "  const rows = Array.from(document.querySelectorAll('table tr'));",
-      "  const seen = new Set();",
-      "  const versions = [];",
+      "(async () => {",
+      "  const projectPath = 'walkme/engine/player/player';",
+      "  const project = encodeURIComponent(projectPath);",
+      "  const perPage = 100;",
       "",
-      "  rows.forEach(row => {",
-      "    const cells = Array.from(row.querySelectorAll('td, th')).map(c => c.textContent.trim());",
-      "    if (!cells.length) return;",
-      "    const version = cells[0];",
-      "    const branch = (cells[1] || '').toLowerCase();",
-      "    if (versionRe.test(version) && (!branch || branch === 'qa') && !seen.has(version)) {",
-      "      seen.add(version);",
-      "      versions.push(version);",
-      "    }",
+      "  // Fetch commits on the qa branch",
+      "  const commitPages = 20; // 20 x 100 = 2000",
+      "  let commits = [];",
+      "  for (let page = 1; page <= commitPages; page++) {",
+      "    const res = await fetch(",
+      "      `https://gitlab.walkmernd.com/api/v4/projects/${project}/repository/commits?ref_name=qa&per_page=${perPage}&page=${page}`,",
+      "      { credentials: 'include' }",
+      "    );",
+      "    const batch = await res.json();",
+      "    if (!Array.isArray(batch) || batch.length === 0) break;",
+      "    commits = commits.concat(batch);",
+      "  }",
+      "",
+      "  // Fetch pipelines on the qa branch with status=success, collect passed commit SHAs",
+      "  const passedShas = new Set();",
+      "  for (let page = 1; page <= 100; page++) {",
+      "    const res = await fetch(",
+      "      `https://gitlab.walkmernd.com/api/v4/projects/${project}/pipelines?ref=qa&status=success&per_page=${perPage}&page=${page}`,",
+      "      { credentials: 'include' }",
+      "    );",
+      "    const batch = await res.json();",
+      "    if (!Array.isArray(batch) || batch.length === 0) break;",
+      "    batch.forEach(p => passedShas.add(p.sha));",
+      "  }",
+      "",
+      "  // Keep only commits that have at least one passed pipeline",
+      "  const passedCommits = commits.filter(c => passedShas.has(c.id));",
+      "",
+      "  const pad = (n) => String(n).padStart(2, '0');",
+      "  const versions = passedCommits.map(c => {",
+      "    const d = new Date(c.committed_date);",
+      "    const Y = d.getUTCFullYear();",
+      "    const Mo = pad(d.getUTCMonth() + 1);",
+      "    const D = pad(d.getUTCDate());",
+      "    const H = pad(d.getUTCHours());",
+      "    const Mi = pad(d.getUTCMinutes());",
+      "    const S = pad(d.getUTCSeconds());",
+      "    return `${Y}${Mo}${D}-${H}${Mi}${S}-${c.short_id}`;",
       "  });",
       "",
       "  const payload = JSON.stringify(versions);",
@@ -104,11 +132,10 @@
       "  a.click();",
       "  document.body.removeChild(a);",
       "  URL.revokeObjectURL(url);",
-      "  console.log(`⬇️ Downloaded lib-versions-qa.json with ${versions.length} entries (only rows currently rendered in the table are scanned).`);",
+      "  console.log(`⬇️ Downloaded lib-versions-qa.json with ${versions.length} passed-pipeline entries (out of ${commits.length} commits scanned on qa).`);",
       "",
-      "  navigator.clipboard.writeText(payload)",
-      "    .then(() => console.log('Also copied to clipboard.'))",
-      "    .catch(e => console.warn('Clipboard copy skipped:', e.name));",
+      "  try { await navigator.clipboard.writeText(payload); console.log('Also copied to clipboard.'); }",
+      "  catch (e) { console.warn('Clipboard copy skipped:', e.name); }",
       "})();",
     ].join('\n');
 
@@ -220,7 +247,7 @@
       :host { all: initial; }
       * { box-sizing: border-box; font-family: Menlo, Consolas, monospace; }
       .panel {
-        width: 480px; max-height: 85vh; min-width: 320px; min-height: 160px;
+        width: 620px; max-height: 85vh; min-width: 320px; min-height: 160px;
         display: flex; flex-direction: column; position: relative;
         background: #1e1e1e; color: #eee; font-size: 12px; line-height: 1.35;
         border: 1px solid #444; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.5);
@@ -293,8 +320,12 @@
       tr.broken-row td { color: #fff; font-weight: 600; }
       tr.broken-row .row-num-cell { color: #ffd6d6; }
       p { color: inherit; margin: 0 0 8px; }
-      .intake { padding: 12px; }
-      .intake-msg { margin-top: 8px; color: #f66; }
+      .intake { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .intake-btns {
+        display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; padding-bottom: 2px;
+      }
+      .intake-btns button { flex: 0 0 auto; white-space: nowrap; font-size: 10.5px; padding: 3px 6px; }
+      .intake-msg { margin-top: 0; color: #f66; }
       .resize-handle {
         position: absolute; left: 0; bottom: 0; width: 14px; height: 14px;
         cursor: nesw-resize;
@@ -375,11 +406,13 @@
         </div>
         <div class="intake">
           <p>No version list loaded yet.</p>
-          <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Get list of walkme libs</button>
-          <button id="wm-load-file">Load from file</button>
-          <button id="wm-paste-manual">Paste manually</button>
-          <button id="wm-manual-snippet">Manual snippet</button>
-          <button id="wm-snippet-in-page">Snippet in page</button>
+          <div class="intake-btns">
+            <button id="wm-gitlab-console" class="gitlab-btn" title="Paste to devtools">Get list of walkme libs</button>
+            <button id="wm-load-file">Load from file</button>
+            <button id="wm-paste-manual">Paste manually</button>
+            <button id="wm-manual-snippet">Manual snippet</button>
+            <button id="wm-snippet-in-page">Snippet in page</button>
+          </div>
           <input type="file" id="wm-file-input" accept="application/json,.json" style="display:none;">
           <p class="intake-msg" id="wm-intake-msg"></p>
         </div>
@@ -539,7 +572,7 @@
           const ok = await copyToClipboard(SCRIPT1_SOURCE);
           grabBtn.textContent = ok ? 'Copied — paste in GitLab console!' : 'Copy failed, try again';
         } else {
-          window.open(QA_DEPLOY_HISTORY_URL, '_blank');
+          window.open(GITLAB_QA_COMMITS_URL, '_blank');
           const ok = await copyToClipboard(SCRIPT2_QA_SOURCE);
           grabBtn.textContent = ok ? 'Copied — paste in deploy history console!' : 'Copy failed, try again';
         }
@@ -592,7 +625,7 @@
           msgEl.style.color = ok ? '#6ab04c' : '#e05252';
           msgEl.textContent = ok ? '' : 'Clipboard copy failed — check permissions.';
         } else {
-          window.open(QA_DEPLOY_HISTORY_URL, '_blank');
+          window.open(GITLAB_QA_COMMITS_URL, '_blank');
           const ok = await copyToClipboard(SCRIPT2_QA_SOURCE);
           grabBtn.textContent = ok ? 'Copied — paste in deploy history console!' : 'Copy failed, try again';
           msgEl.style.color = ok ? '#6ab04c' : '#e05252';
