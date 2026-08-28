@@ -497,7 +497,7 @@
             <label>Preview</label>
             <div class="preview" id="wi-preview">—</div>
           </div>
-          <div class="row">
+          <div class="row hidden" id="wi-action-row">
             <button id="wi-inject" class="apply-btn">Inject now</button>
             <button id="wi-copy">Copy script</button>
           </div>
@@ -511,7 +511,7 @@
 
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
-      content.querySelector('#wi-next').onclick = () => goBack();
+      content.querySelector('#wi-next').onclick = () => renderTable();
 
       const envEl = content.querySelector('#wi-env');
       const guidEl = content.querySelector('#wi-guid');
@@ -533,9 +533,12 @@
         return buildUrl(envEl.value, guid, currentSegment());
       }
 
+      const actionRowEl = content.querySelector('#wi-action-row');
+
       function updatePreview() {
         const url = currentUrl();
         previewEl.textContent = url ? buildSnippet(url) : 'Enter a GUID to preview the script.';
+        actionRowEl.classList.toggle('hidden', !url);
       }
 
       function updateSegmentVisibility() {
@@ -554,8 +557,7 @@
         const url = currentUrl();
         if (!url) { msgEl.style.color = '#e05252'; msgEl.textContent = 'Enter a GUID first.'; return; }
         injectSnippet(url);
-        msgEl.style.color = '#6ab04c';
-        msgEl.textContent = 'Injected — script tag added to the page.';
+        renderTable();
       };
 
       content.querySelector('#wi-copy').onclick = async () => {
