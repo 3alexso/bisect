@@ -6,6 +6,7 @@
 
     const LIST_KEY = 'wm_libVersionList_v1';
     const STATUS_KEY = 'wm_libVersionStatus_v1';
+    const ALWAYS_INJECT_KEY = 'wm_alwaysInjectUrl_v1';
     const GITLAB_PROJECT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/';
     const GITLAB_COMMIT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commit/';
     const GITLAB_QA_COMMITS_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commits/qa?ref_type=heads';
@@ -389,12 +390,39 @@
       };
     }
 
+    function renderMainMenu() {
+      content.innerHTML = `
+        <div class="header" id="wm-header">
+          <div class="header-top">
+            <div class="title-group"><strong>Lib Version Bisect</strong></div>
+            <div class="header-btns">
+              <button id="wm-collapse" class="icon-btn">▲</button>
+              <button id="wm-close" class="icon-btn">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="intake">
+          <p>What would you like to do?</p>
+          <div class="intake-btns">
+            <button id="wm-menu-bisect" class="apply-btn">Bisect</button>
+            <button id="wm-menu-inject">Inject walkme</button>
+          </div>
+        </div>
+      `;
+      content.querySelector('#wm-close').onclick = () => host.remove();
+      content.querySelector('#wm-menu-bisect').onclick = () => renderIntake();
+      content.querySelector('#wm-menu-inject').onclick = () => renderInjectOnly();
+      attachDrag();
+      attachCollapse();
+    }
+
     function renderIntake() {
       content.innerHTML = `
         <div class="header" id="wm-header">
           <div class="header-top">
             <div class="title-group"><strong>Lib Version Bisect</strong></div>
             <div class="header-btns">
+              <button id="wm-back">&larr; Back</button>
               <button id="wm-collapse" class="icon-btn">▲</button>
               <button id="wm-close" class="icon-btn">✕</button>
             </div>
@@ -410,8 +438,120 @@
         </div>
       `;
       content.querySelector('#wm-close').onclick = () => host.remove();
+      content.querySelector('#wm-back').onclick = () => renderMainMenu();
       content.querySelector('#wm-manual-snippet').onclick = () => renderInjector();
       content.querySelector('#wm-snippet-in-page').onclick = () => renderSnippetInPage();
+      attachDrag();
+      attachCollapse();
+    }
+
+    function renderInjectOnly() {
+      content.innerHTML = `
+        <div class="header" id="wm-header">
+          <div class="header-top">
+            <div class="title-group"><strong>Inject WalkMe</strong></div>
+            <div class="header-btns">
+              <button id="wm-back">&larr; Back</button>
+              <button id="wm-collapse" class="icon-btn">▲</button>
+              <button id="wm-close" class="icon-btn">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="injector-body">
+          <div>
+            <label>Environment</label>
+            <select id="io-env">
+              <option value="cdn.walkme.com">Prod US (cdn.walkme.com)</option>
+              <option value="cdn.walkmeqa.com">QA (cdn.walkmeqa.com)</option>
+            </select>
+          </div>
+          <div>
+            <label>User GUID</label>
+            <input type="text" id="io-guid" placeholder="e.g. 7cdf0e5eb1974f5b986ab39ee34c52cf">
+          </div>
+          <div>
+            <label>Path</label>
+            <select id="io-segment">
+              <option value="">Production</option>
+              <option value="test" selected>Test</option>
+              <option value="success">Success</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div id="io-custom-wrap" class="hidden">
+            <label>Custom path segment</label>
+            <input type="text" id="io-custom" placeholder="e.g. staging">
+          </div>
+          <div>
+            <label>Preview</label>
+            <div class="preview" id="io-preview">—</div>
+          </div>
+          <div class="row hidden" id="io-action-row">
+            <button id="io-inject" class="apply-btn">Always Inject</button>
+            <button id="io-copy">Copy script</button>
+          </div>
+          <div class="msg" id="io-msg"></div>
+        </div>
+      `;
+
+      content.querySelector('#wm-close').onclick = () => host.remove();
+      content.querySelector('#wm-back').onclick = () => renderMainMenu();
+
+      const envEl = content.querySelector('#io-env');
+      const guidEl = content.querySelector('#io-guid');
+      const segmentEl = content.querySelector('#io-segment');
+      const customWrapEl = content.querySelector('#io-custom-wrap');
+      const customEl = content.querySelector('#io-custom');
+      const previewEl = content.querySelector('#io-preview');
+      const msgEl = content.querySelector('#io-msg');
+      const actionRowEl = content.querySelector('#io-action-row');
+
+      function currentSegment() {
+        if (segmentEl.value === 'custom') return customEl.value.trim();
+        return segmentEl.value;
+      }
+
+      function currentUrl() {
+        const guid = guidEl.value.trim();
+        if (!guid) return null;
+        return buildUrl(envEl.value, guid, currentSegment());
+      }
+
+      function updatePreview() {
+        const url = currentUrl();
+        previewEl.textContent = url ? buildSnippet(url) : 'Enter a GUID to preview the script.';
+        actionRowEl.classList.toggle('hidden', !url);
+      }
+
+      function updateSegmentVisibility() {
+        customWrapEl.classList.toggle('hidden', segmentEl.value !== 'custom');
+      }
+
+      envEl.onchange = updatePreview;
+      guidEl.oninput = updatePreview;
+      segmentEl.onchange = () => { updateSegmentVisibility(); updatePreview(); };
+      customEl.oninput = updatePreview;
+
+      updateSegmentVisibility();
+      updatePreview();
+
+      content.querySelector('#io-inject').onclick = () => {
+        const url = currentUrl();
+        if (!url) { msgEl.style.color = '#e05252'; msgEl.textContent = 'Enter a GUID first.'; return; }
+        localStorage.setItem(ALWAYS_INJECT_KEY, url);
+        injectSnippet(url);
+        msgEl.style.color = '#6ab04c';
+        msgEl.textContent = 'Injected — script tag added to the page, and saved to always inject on future page loads.';
+      };
+
+      content.querySelector('#io-copy').onclick = async () => {
+        const url = currentUrl();
+        if (!url) { msgEl.style.color = '#e05252'; msgEl.textContent = 'Enter a GUID first.'; return; }
+        const ok = await copyToClipboard(buildSnippet(url));
+        msgEl.style.color = ok ? '#6ab04c' : '#e05252';
+        msgEl.textContent = ok ? 'Copied to clipboard.' : 'Copy failed — check clipboard permissions.';
+      };
+
       attachDrag();
       attachCollapse();
     }
@@ -458,7 +598,7 @@
             <div class="preview" id="wi-preview">—</div>
           </div>
           <div class="row hidden" id="wi-action-row">
-            <button id="wi-inject" class="apply-btn">Inject now</button>
+            <button id="wi-inject" class="apply-btn">Always Inject</button>
             <button id="wi-copy">Copy script</button>
           </div>
           <div class="intake-section-title">Add Lib versions</div>
@@ -558,6 +698,7 @@
       content.querySelector('#wi-inject').onclick = () => {
         const url = currentUrl();
         if (!url) { msgEl.style.color = '#e05252'; msgEl.textContent = 'Enter a GUID first.'; return; }
+        localStorage.setItem(ALWAYS_INJECT_KEY, url);
         injectSnippet(url);
         renderTable();
       };
@@ -695,6 +836,7 @@
               <strong id="wm-title">Lib Versions</strong>
             </div>
             <div class="header-btns">
+              <button id="wm-back">&larr; Back</button>
               <button id="wm-reload">Reload libs</button>
               <button id="wm-collapse" class="icon-btn">▲</button>
               <button id="wm-close" class="icon-btn">✕</button>
@@ -722,6 +864,8 @@
       const tbody = content.querySelector('#wm-tbody');
       const titleEl = content.querySelector('#wm-title');
       const suggestEl = content.querySelector('#wm-suggest');
+
+      content.querySelector('#wm-back').onclick = () => renderIntake();
 
       function renderTitle() {
         const passed = Object.values(status).filter(s => s === 'passed').length;
@@ -751,9 +895,10 @@
             window.open(GITLAB_COMMIT_URL + sha, '_blank');
           };
           suggestEl.querySelector('#wm-broken-clear-all').onclick = () => {
-            if (!confirm('Clear the saved list, all pass/fail marks, and the applied lib override? This resets everything.')) return;
+            if (!confirm('Clear the saved list, all pass/fail marks, the applied lib override, and the Always Inject snippet? This resets everything.')) return;
             localStorage.removeItem(LIST_KEY);
             localStorage.removeItem(STATUS_KEY);
+            localStorage.removeItem(ALWAYS_INJECT_KEY);
             resetLibOverride();
             versions = null;
             status = {};
@@ -884,8 +1029,11 @@
       renderRows(); renderTitle(); renderSuggestion();
     }
 
+    const alwaysInjectUrl = localStorage.getItem(ALWAYS_INJECT_KEY);
+    if (alwaysInjectUrl) injectSnippet(alwaysInjectUrl);
+
     if (Array.isArray(versions) && versions.length) renderTable();
-    else renderIntake();
+    else renderMainMenu();
   }
 
   main();
