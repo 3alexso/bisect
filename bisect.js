@@ -391,6 +391,7 @@
     }
 
     function renderMainMenu() {
+      const alwaysInjectActive = !!localStorage.getItem(ALWAYS_INJECT_KEY);
       content.innerHTML = `
         <div class="header" id="wm-header">
           <div class="header-top">
@@ -405,13 +406,20 @@
           <p>What would you like to do?</p>
           <div class="intake-btns">
             <button id="wm-menu-bisect" class="apply-btn">Bisect</button>
-            <button id="wm-menu-inject">Inject walkme</button>
+            <button id="wm-menu-inject" class="${alwaysInjectActive ? 'reset-lib-btn' : ''}">${alwaysInjectActive ? 'Stop Walkme Injection' : 'Inject walkme'}</button>
           </div>
         </div>
       `;
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-menu-bisect').onclick = () => renderIntake();
-      content.querySelector('#wm-menu-inject').onclick = () => renderInjectOnly();
+      content.querySelector('#wm-menu-inject').onclick = () => {
+        if (alwaysInjectActive) {
+          localStorage.removeItem(ALWAYS_INJECT_KEY);
+          renderMainMenu();
+        } else {
+          renderInjectOnly();
+        }
+      };
       attachDrag();
       attachCollapse();
     }
