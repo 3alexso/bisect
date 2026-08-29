@@ -402,56 +402,16 @@
         </div>
         <div class="intake">
           <p>No version list loaded yet.</p>
-          <div class="intake-section-title">Snippet</div>
+          <div class="intake-section-title">Choose Injection method</div>
           <div class="intake-btns">
             <button id="wm-manual-snippet">Manual snippet</button>
             <button id="wm-snippet-in-page">Snippet in page</button>
           </div>
-          <div class="intake-section-title">Add Lib versions</div>
-          <div class="intake-btns">
-            <button id="wm-load-file">Load from file</button>
-            <button id="wm-paste-manual">Paste manually</button>
-          </div>
-          <input type="file" id="wm-file-input" accept="application/json,.json" style="display:none;">
-          <p class="intake-msg" id="wm-intake-msg"></p>
         </div>
       `;
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-manual-snippet').onclick = () => renderInjector();
       content.querySelector('#wm-snippet-in-page').onclick = () => renderSnippetInPage();
-
-      const fileInput = content.querySelector('#wm-file-input');
-      content.querySelector('#wm-load-file').onclick = () => fileInput.click();
-      fileInput.onchange = () => {
-        const file = fileInput.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const parsed = JSON.parse(reader.result);
-            if (!Array.isArray(parsed) || !parsed.every(v => typeof v === 'string')) throw new Error('bad shape');
-            versions = parsed;
-            localStorage.setItem(LIST_KEY, JSON.stringify(versions));
-            renderTable();
-          } catch (e) {
-            content.querySelector('#wm-intake-msg').textContent = 'Could not parse that file: ' + e.message;
-          }
-        };
-        reader.readAsText(file);
-      };
-
-      content.querySelector('#wm-paste-manual').onclick = () => {
-        const pasted = prompt('Paste the lib version list:');
-        if (!pasted) return;
-        try { versions = JSON.parse(pasted); }
-        catch { versions = pasted.split(/\r?\n/).map(s => s.trim()).filter(Boolean); }
-        if (!Array.isArray(versions) || !versions.length) {
-          content.querySelector('#wm-intake-msg').textContent = 'Could not parse that input.';
-          return;
-        }
-        localStorage.setItem(LIST_KEY, JSON.stringify(versions));
-        renderTable();
-      };
       attachDrag();
       attachCollapse();
     }
@@ -501,6 +461,13 @@
             <button id="wi-inject" class="apply-btn">Inject now</button>
             <button id="wi-copy">Copy script</button>
           </div>
+          <div class="intake-section-title">Add Lib versions</div>
+          <div class="intake-btns">
+            <button id="wi-load-file">Load from file</button>
+            <button id="wi-paste-manual">Paste manually</button>
+          </div>
+          <input type="file" id="wi-file-input" accept="application/json,.json" style="display:none;">
+          <p class="intake-msg" id="wi-lib-msg"></p>
           <div class="row">
             <button id="wi-grab" class="gitlab-btn">Get list of walkme libs</button>
             <button id="wi-next" class="apply-btn">Next</button>
@@ -512,6 +479,41 @@
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
       content.querySelector('#wi-next').onclick = () => renderTable();
+
+      const wiFileInput = content.querySelector('#wi-file-input');
+      content.querySelector('#wi-load-file').onclick = () => wiFileInput.click();
+      wiFileInput.onchange = () => {
+        const file = wiFileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(reader.result);
+            if (!Array.isArray(parsed) || !parsed.every(v => typeof v === 'string')) throw new Error('bad shape');
+            versions = parsed;
+            localStorage.setItem(LIST_KEY, JSON.stringify(versions));
+            renderTable();
+          } catch (e) {
+            content.querySelector('#wi-lib-msg').textContent = 'Could not parse that file: ' + e.message;
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      content.querySelector('#wi-paste-manual').onclick = () => {
+        const pasted = prompt('Paste the lib version list:');
+        if (!pasted) return;
+        let parsedVersions;
+        try { parsedVersions = JSON.parse(pasted); }
+        catch { parsedVersions = pasted.split(/\r?\n/).map(s => s.trim()).filter(Boolean); }
+        if (!Array.isArray(parsedVersions) || !parsedVersions.length) {
+          content.querySelector('#wi-lib-msg').textContent = 'Could not parse that input.';
+          return;
+        }
+        versions = parsedVersions;
+        localStorage.setItem(LIST_KEY, JSON.stringify(versions));
+        renderTable();
+      };
 
       const envEl = content.querySelector('#wi-env');
       const guidEl = content.querySelector('#wi-guid');
@@ -605,9 +607,16 @@
               <option value="cdn.walkmeqa.com">QA (cdn.walkmeqa.com)</option>
             </select>
           </div>
+          <div class="intake-section-title">Add Lib versions</div>
+          <div class="intake-btns">
+            <button id="sp-load-file">Load from file</button>
+            <button id="sp-paste-manual">Paste manually</button>
+          </div>
+          <input type="file" id="sp-file-input" accept="application/json,.json" style="display:none;">
+          <p class="intake-msg" id="sp-lib-msg"></p>
           <div class="row">
             <button id="sp-grab" class="gitlab-btn">Get list of walkme libs</button>
-            <button id="sp-skip">Skip</button>
+            <button id="sp-next">Next</button>
           </div>
           <div class="msg" id="sp-msg"></div>
         </div>
@@ -615,7 +624,42 @@
 
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
-      content.querySelector('#sp-skip').onclick = () => renderTable();
+      content.querySelector('#sp-next').onclick = () => renderTable();
+
+      const spFileInput = content.querySelector('#sp-file-input');
+      content.querySelector('#sp-load-file').onclick = () => spFileInput.click();
+      spFileInput.onchange = () => {
+        const file = spFileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(reader.result);
+            if (!Array.isArray(parsed) || !parsed.every(v => typeof v === 'string')) throw new Error('bad shape');
+            versions = parsed;
+            localStorage.setItem(LIST_KEY, JSON.stringify(versions));
+            renderTable();
+          } catch (e) {
+            content.querySelector('#sp-lib-msg').textContent = 'Could not parse that file: ' + e.message;
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      content.querySelector('#sp-paste-manual').onclick = () => {
+        const pasted = prompt('Paste the lib version list:');
+        if (!pasted) return;
+        let parsedVersions;
+        try { parsedVersions = JSON.parse(pasted); }
+        catch { parsedVersions = pasted.split(/\r?\n/).map(s => s.trim()).filter(Boolean); }
+        if (!Array.isArray(parsedVersions) || !parsedVersions.length) {
+          content.querySelector('#sp-lib-msg').textContent = 'Could not parse that input.';
+          return;
+        }
+        versions = parsedVersions;
+        localStorage.setItem(LIST_KEY, JSON.stringify(versions));
+        renderTable();
+      };
 
       const envEl = content.querySelector('#sp-env');
       const grabBtn = content.querySelector('#sp-grab');
