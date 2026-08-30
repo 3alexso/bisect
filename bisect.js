@@ -7,6 +7,7 @@
     const LIST_KEY = 'wm_libVersionList_v1';
     const STATUS_KEY = 'wm_libVersionStatus_v1';
     const ALWAYS_INJECT_KEY = 'wm_alwaysInjectUrl_v1';
+    const APPLIED_KEY = 'wm_appliedVersion_v1';
     const GITLAB_PROJECT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/';
     const GITLAB_COMMIT_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commit/';
     const GITLAB_QA_COMMITS_URL = 'https://gitlab.walkmernd.com/walkme/engine/player/player/-/commits/qa?ref_type=heads';
@@ -163,11 +164,13 @@
     function applyLibVersion(version) {
       window.localStorage.setItem('walkmePublicPath', `https://cdn.walkme.com/player/lib/${version}/`);
       window.localStorage.setItem('walkmeCustomeLibUrl', `https://cdn.walkme.com/player/lib/walkme_lib_${version}.js`);
+      window.localStorage.setItem(APPLIED_KEY, version);
     }
 
     function resetLibOverride() {
       window.localStorage.removeItem('walkmePublicPath');
       window.localStorage.removeItem('walkmeCustomeLibUrl');
+      window.localStorage.removeItem(APPLIED_KEY);
     }
 
     function extractSha(version) {
@@ -198,6 +201,26 @@
       if (maxFailIdx === -1) return null;
       if (minPassIdx - maxFailIdx === 1) return { index: maxFailIdx, version: versions[maxFailIdx] };
       return null;
+    }
+
+    // Shared bisect bounds: highest-index known-failed row and lowest-index known-passed row.
+    // Everything at or "above" maxFailIdx is presumed failed; everything at or "below" minPassIdx is presumed passed.
+    function computeBounds() {
+      let maxFailIdx = -1, minPassIdx = versions ? versions.length : 0;
+      (versions || []).forEach((v, i) => {
+        const s = status[v];
+        if (s === 'failed' && i > maxFailIdx) maxFailIdx = i;
+        if (s === 'passed' && i < minPassIdx) minPassIdx = i;
+      });
+      return { maxFailIdx, minPassIdx };
+    }
+
+    // Minimum number of bisection steps still needed to pinpoint the exact breaking commit.
+    function remainingIterations() {
+      const { maxFailIdx, minPassIdx } = computeBounds();
+      const candidateCount = Math.max(0, minPassIdx - maxFailIdx - 1);
+      if (candidateCount <= 0) return 0;
+      return Math.ceil(Math.log2(candidateCount + 1));
     }
 
     function buildUrl(domain, guid, segment) {
@@ -292,6 +315,11 @@
         flex: 0 0 auto; padding: 6px 10px; background: #2a2a2a; border-bottom: 1px solid #444;
         color: #ddd; display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;
       }
+      .applied-banner {
+        flex: 0 0 auto; padding: 6px 10px; background: #123319; border-bottom: 1px solid #2e7d32;
+        color: #d7f5df; display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;
+      }
+      .applied-banner .btn-group { display: flex; gap: 5px; }
       .suggest button { flex: 0 0 auto; background: #1565c0; border-color: #1976d2; }
       .suggest button:hover { background: #1976d2; }
       .suggest.broken { background: #4a1414; border-bottom-color: #b3261e; color: #ffb3b3; }
@@ -310,6 +338,10 @@
       .apply-cell, .status-cell { text-align: center; white-space: nowrap; }
       .status-cell button { margin-right: 3px; opacity: 0.6; }
       .status-cell button.active { opacity: 1; }
+      button.pass-btn.active { background: #2e7d32; border-color: #66bb6a; color: #fff; font-weight: 700; }
+      button.pass-btn.active:hover { background: #388e3c; }
+      button.fail-btn.active { background: #c62828; border-color: #ef5350; color: #fff; font-weight: 700; }
+      button.fail-btn.active:hover { background: #d32f2f; }
       tr.jump-highlight { background: #ffb30055 !important; transition: background 0.3s; }
       tr.broken-row { background: #b3261e !important; }
       tr.broken-row td { color: #fff; font-weight: 600; }
@@ -890,6 +922,7 @@
             <button id="wm-reset-lib" class="reset-lib-btn">Clear Lib</button>
           </div>
         </div>
+        <div class="applied-banner hidden" id="wm-applied"></div>
         <div class="suggest" id="wm-suggest"></div>
         <div class="scroll-area">
           <table>
@@ -907,14 +940,43 @@
       const tbody = content.querySelector('#wm-tbody');
       const titleEl = content.querySelector('#wm-title');
       const suggestEl = content.querySelector('#wm-suggest');
+      const appliedEl = content.querySelector('#wm-applied');
 
       content.querySelector('#wm-back').onclick = () => renderIntake();
 
       function renderTitle() {
         const passed = Object.values(status).filter(s => s === 'passed').length;
         const failed = Object.values(status).filter(s => s === 'failed').length;
-        const remaining = versions.length - passed - failed;
-        titleEl.textContent = `${versions.length} Libs Loaded — ✅ ${passed} Passed   ❌ ${failed} Failed   ⬜ ${remaining} Left`;
+        const left = remainingIterations();
+        titleEl.textContent = `${versions.length} Libs Loaded — ✅ ${passed} Passed   ❌ ${failed} Failed   ⬜ ${left} Left`;
+      }
+
+      function renderAppliedBanner() {
+        const applied = localStorage.getItem(APPLIED_KEY);
+        if (!applied || !versions.includes(applied)) {
+          appliedEl.classList.add('hidden');
+          appliedEl.innerHTML = '';
+          return;
+        }
+        appliedEl.classList.remove('hidden');
+        const st = status[applied] || '';
+        appliedEl.innerHTML = `
+          <span>Did <b>${applied}</b> pass or fail?</span>
+          <div class="btn-group">
+            <button id="wm-applied-pass" class="pass-btn${st === 'passed' ? ' active' : ''}">PASSED</button>
+            <button id="wm-applied-fail" class="fail-btn${st === 'failed' ? ' active' : ''}">FAILED</button>
+          </div>
+        `;
+        appliedEl.querySelector('#wm-applied-pass').onclick = () => {
+          status[applied] = status[applied] === 'passed' ? '' : 'passed';
+          if (!status[applied]) delete status[applied];
+          saveStatus(status); renderRows(); renderTitle(); renderSuggestion(); renderAppliedBanner();
+        };
+        appliedEl.querySelector('#wm-applied-fail').onclick = () => {
+          status[applied] = status[applied] === 'failed' ? '' : 'failed';
+          if (!status[applied]) delete status[applied];
+          saveStatus(status); renderRows(); renderTitle(); renderSuggestion(); renderAppliedBanner();
+        };
       }
 
       function renderSuggestion() {
@@ -982,16 +1044,23 @@
 
       function renderRows() {
         const broken = findBroken();
+        const { maxFailIdx, minPassIdx } = computeBounds();
         tbody.innerHTML = '';
         versions.forEach((v, i) => {
           const st = status[v] || '';
           const isBroken = broken && broken.index === i;
+          const impliedFailed = !st && maxFailIdx !== -1 && i <= maxFailIdx;
+          const impliedPassed = !st && minPassIdx !== versions.length && i >= minPassIdx;
           const tr = document.createElement('tr');
           tr.dataset.index = i;
           if (isBroken) {
             tr.classList.add('broken-row');
+          } else if (st === 'passed' || impliedPassed) {
+            tr.style.background = '#2e7d3255';
+          } else if (st === 'failed' || impliedFailed) {
+            tr.style.background = '#c6282855';
           } else {
-            tr.style.background = st === 'passed' ? '#2e7d3222' : st === 'failed' ? '#c6282822' : '';
+            tr.style.background = '';
           }
 
           const tdNum = document.createElement('td');
@@ -1017,8 +1086,10 @@
           tdStatus.className = 'status-cell';
 
           const passBtn = document.createElement('button');
+          passBtn.className = 'pass-btn';
           passBtn.textContent = 'PASSED';
           const failBtn = document.createElement('button');
+          failBtn.className = 'fail-btn';
           failBtn.textContent = 'FAILED';
           if (st === 'passed') passBtn.classList.add('active');
           if (st === 'failed') failBtn.classList.add('active');
@@ -1026,12 +1097,12 @@
           passBtn.onclick = () => {
             status[v] = status[v] === 'passed' ? '' : 'passed';
             if (!status[v]) delete status[v];
-            saveStatus(status); renderRows(); renderTitle(); renderSuggestion();
+            saveStatus(status); renderRows(); renderTitle(); renderSuggestion(); renderAppliedBanner();
           };
           failBtn.onclick = () => {
             status[v] = status[v] === 'failed' ? '' : 'failed';
             if (!status[v]) delete status[v];
-            saveStatus(status); renderRows(); renderTitle(); renderSuggestion();
+            saveStatus(status); renderRows(); renderTitle(); renderSuggestion(); renderAppliedBanner();
           };
 
           tdStatus.appendChild(passBtn);
@@ -1047,7 +1118,7 @@
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-reset').onclick = () => {
         if (confirm('Clear all saved pass/fail marks?')) {
-          status = {}; saveStatus(status); renderRows(); renderTitle(); renderSuggestion();
+          status = {}; saveStatus(status); renderRows(); renderTitle(); renderSuggestion(); renderAppliedBanner();
         }
       };
       content.querySelector('#wm-reset-lib').onclick = () => {
@@ -1070,7 +1141,7 @@
 
       attachDrag();
       attachCollapse();
-      renderRows(); renderTitle(); renderSuggestion();
+      renderRows(); renderTitle(); renderSuggestion(); renderAppliedBanner();
     }
 
     const alwaysInjectUrl = localStorage.getItem(ALWAYS_INJECT_KEY);
