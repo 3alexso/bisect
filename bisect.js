@@ -266,6 +266,7 @@
         display: inline-block; text-align: center;
       }
       button:hover { background: #444; }
+      button:disabled { opacity: 0.4; cursor: not-allowed; }
       button.icon-btn { padding: 3px 8px; font-weight: 700; }
       button.gitlab-btn { background: #6e49cb; border-color: #7b52e0; }
       button.gitlab-btn:hover { background: #7b52e0; }
@@ -280,6 +281,7 @@
         border-radius: 4px; padding: 5px 6px; font-size: 12px;
       }
       .injector-body .row { display: flex; gap: 6px; }
+      .injector-body .row.next-row { justify-content: flex-end; margin-top: 2px; }
       .injector-body .preview {
         background: #111; border: 1px solid #333; border-radius: 4px; padding: 6px;
         word-break: break-all; color: #9cdcfe; max-height: 90px; overflow-y: auto;
@@ -324,10 +326,13 @@
       .intake-btns button { flex: 0 0 auto; white-space: nowrap; font-size: 10.5px; padding: 3px 6px; }
       .intake-msg { margin-top: 0; color: #f66; }
       .resize-handle {
-        position: absolute; left: 0; bottom: 0; width: 14px; height: 14px;
-        cursor: nesw-resize;
+        position: absolute; width: 14px; height: 14px;
         background: linear-gradient(45deg, transparent 0 40%, #777 40% 55%, transparent 55% 70%, #777 70% 85%, transparent 85% 100%);
       }
+      .resize-handle.bl { left: 0; bottom: 0; cursor: nesw-resize; }
+      .resize-handle.br { right: 0; bottom: 0; cursor: nwse-resize; }
+      .resize-handle.tl { left: 0; top: 0; cursor: nwse-resize; }
+      .resize-handle.tr { right: 0; top: 0; cursor: nesw-resize; }
     `;
     shadow.appendChild(style);
 
@@ -339,27 +344,41 @@
     content.className = 'content';
     panel.appendChild(content);
 
-    const resizeHandle = document.createElement('div');
-    resizeHandle.className = 'resize-handle';
-    panel.appendChild(resizeHandle);
-
-    let resizeStart = null;
-    resizeHandle.onmousedown = (e) => {
-      e.preventDefault();
-      const rect = panel.getBoundingClientRect();
-      resizeStart = { x: e.clientX, y: e.clientY, w: rect.width, h: rect.height };
-    };
-    document.addEventListener('mousemove', (e) => {
-      if (!resizeStart) return;
-      const dx = e.clientX - resizeStart.x;
-      const dy = e.clientY - resizeStart.y;
-      const maxW = window.innerWidth * 0.9;
-      const newW = Math.min(maxW, Math.max(320, resizeStart.w - dx));
-      const newH = Math.max(160, resizeStart.h + dy);
-      panel.style.width = newW + 'px';
-      panel.style.height = newH + 'px';
-    });
-    document.addEventListener('mouseup', () => { resizeStart = null; });
+    function makeResizable(corner) {
+      const handle = document.createElement('div');
+      handle.className = 'resize-handle ' + corner;
+      panel.appendChild(handle);
+      let start = null;
+      handle.onmousedown = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = panel.getBoundingClientRect();
+        const hostRect = host.getBoundingClientRect();
+        start = { x: e.clientX, y: e.clientY, w: rect.width, h: rect.height, left: hostRect.left, top: hostRect.top };
+      };
+      document.addEventListener('mousemove', (e) => {
+        if (!start) return;
+        const dx = e.clientX - start.x;
+        const dy = e.clientY - start.y;
+        const maxW = window.innerWidth * 0.9;
+        let newW = start.w, newH = start.h;
+        if (corner === 'tl' || corner === 'bl') newW = Math.min(maxW, Math.max(320, start.w - dx));
+        else newW = Math.min(maxW, Math.max(320, start.w + dx));
+        if (corner === 'tl' || corner === 'tr') newH = Math.max(160, start.h - dy);
+        else newH = Math.max(160, start.h + dy);
+        panel.style.width = newW + 'px';
+        panel.style.height = newH + 'px';
+        if (corner === 'tl' || corner === 'bl') {
+          host.style.left = (start.left + (start.w - newW)) + 'px';
+          host.style.right = 'auto';
+        }
+        if (corner === 'tl' || corner === 'tr') {
+          host.style.top = (start.top + (start.h - newH)) + 'px';
+        }
+      });
+      document.addEventListener('mouseup', () => { start = null; });
+    }
+    ['tl', 'tr', 'bl', 'br'].forEach(makeResizable);
 
     function attachDrag() {
       const header = content.querySelector('#wm-header');
@@ -467,18 +486,18 @@
         </div>
         <div class="injector-body">
           <div>
-            <label>Environment</label>
+            <label>Domain</label>
             <select id="io-env">
               <option value="cdn.walkme.com">Prod US (cdn.walkme.com)</option>
               <option value="cdn.walkmeqa.com">QA (cdn.walkmeqa.com)</option>
             </select>
           </div>
           <div>
-            <label>User GUID</label>
+            <label>System GUID</label>
             <input type="text" id="io-guid" placeholder="e.g. 7cdf0e5eb1974f5b986ab39ee34c52cf">
           </div>
           <div>
-            <label>Path</label>
+            <label>Environment</label>
             <select id="io-segment">
               <option value="">Production</option>
               <option value="test" selected>Test</option>
@@ -496,7 +515,7 @@
           </div>
           <div class="row hidden" id="io-action-row">
             <button id="io-inject" class="apply-btn">Always Inject</button>
-            <button id="io-copy">Copy script</button>
+            <button id="io-copy">Copy snippet</button>
           </div>
           <div class="msg" id="io-msg"></div>
         </div>
@@ -578,18 +597,18 @@
         </div>
         <div class="injector-body">
           <div>
-            <label>Environment</label>
+            <label>Domain</label>
             <select id="wi-env">
               <option value="cdn.walkme.com">Prod US (cdn.walkme.com)</option>
               <option value="cdn.walkmeqa.com">QA (cdn.walkmeqa.com)</option>
             </select>
           </div>
           <div>
-            <label>User GUID</label>
+            <label>System GUID</label>
             <input type="text" id="wi-guid" placeholder="e.g. 7cdf0e5eb1974f5b986ab39ee34c52cf">
           </div>
           <div>
-            <label>Path</label>
+            <label>Environment</label>
             <select id="wi-segment">
               <option value="">Production</option>
               <option value="test" selected>Test</option>
@@ -607,26 +626,34 @@
           </div>
           <div class="row hidden" id="wi-action-row">
             <button id="wi-inject" class="apply-btn">Always Inject</button>
-            <button id="wi-copy">Copy script</button>
+            <button id="wi-copy">Copy snippet</button>
           </div>
           <div class="intake-section-title">Add Lib versions</div>
           <div class="intake-btns">
+            <button id="wi-grab" class="gitlab-btn">Get list of walkme libs</button>
             <button id="wi-load-file">Load from file</button>
-            <button id="wi-paste-manual">Paste manually</button>
+            <button id="wi-paste-manual">Add manually</button>
           </div>
           <input type="file" id="wi-file-input" accept="application/json,.json" style="display:none;">
           <p class="intake-msg" id="wi-lib-msg"></p>
-          <div class="row">
-            <button id="wi-grab" class="gitlab-btn">Get list of walkme libs</button>
+          <div class="msg" id="wi-msg"></div>
+          <div class="row next-row">
             <button id="wi-next" class="apply-btn">Next</button>
           </div>
-          <div class="msg" id="wi-msg"></div>
         </div>
       `;
 
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
-      content.querySelector('#wi-next').onclick = () => renderTable();
+
+      const wiNextBtn = content.querySelector('#wi-next');
+      function updateNextState() {
+        const hasVersions = Array.isArray(versions) && versions.length > 0;
+        wiNextBtn.disabled = !hasVersions;
+        wiNextBtn.title = hasVersions ? '' : 'Please load Lib versions';
+      }
+      wiNextBtn.onclick = () => renderTable();
+      updateNextState();
 
       const wiFileInput = content.querySelector('#wi-file-input');
       content.querySelector('#wi-load-file').onclick = () => wiFileInput.click();
@@ -653,7 +680,7 @@
         if (!pasted) return;
         let parsedVersions;
         try { parsedVersions = JSON.parse(pasted); }
-        catch { parsedVersions = pasted.split(/\r?\n/).map(s => s.trim()).filter(Boolean); }
+        catch { parsedVersions = pasted.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean); }
         if (!Array.isArray(parsedVersions) || !parsedVersions.length) {
           content.querySelector('#wi-lib-msg').textContent = 'Could not parse that input.';
           return;
@@ -750,7 +777,7 @@
         </div>
         <div class="injector-body">
           <div>
-            <label>Environment</label>
+            <label>Domain</label>
             <select id="sp-env">
               <option value="cdn.walkme.com">Prod US (cdn.walkme.com)</option>
               <option value="cdn.walkmeqa.com">QA (cdn.walkmeqa.com)</option>
@@ -758,22 +785,30 @@
           </div>
           <div class="intake-section-title">Add Lib versions</div>
           <div class="intake-btns">
+            <button id="sp-grab" class="gitlab-btn">Get list of walkme libs</button>
             <button id="sp-load-file">Load from file</button>
-            <button id="sp-paste-manual">Paste manually</button>
+            <button id="sp-paste-manual">Add manually</button>
           </div>
           <input type="file" id="sp-file-input" accept="application/json,.json" style="display:none;">
           <p class="intake-msg" id="sp-lib-msg"></p>
-          <div class="row">
-            <button id="sp-grab" class="gitlab-btn">Get list of walkme libs</button>
-            <button id="sp-next">Next</button>
-          </div>
           <div class="msg" id="sp-msg"></div>
+          <div class="row next-row">
+            <button id="sp-next" class="apply-btn">Next</button>
+          </div>
         </div>
       `;
 
       content.querySelector('#wm-close').onclick = () => host.remove();
       content.querySelector('#wm-back').onclick = () => goBack();
-      content.querySelector('#sp-next').onclick = () => renderTable();
+
+      const spNextBtn = content.querySelector('#sp-next');
+      function updateNextState() {
+        const hasVersions = Array.isArray(versions) && versions.length > 0;
+        spNextBtn.disabled = !hasVersions;
+        spNextBtn.title = hasVersions ? '' : 'Please load Lib versions';
+      }
+      spNextBtn.onclick = () => renderTable();
+      updateNextState();
 
       const spFileInput = content.querySelector('#sp-file-input');
       content.querySelector('#sp-load-file').onclick = () => spFileInput.click();
@@ -800,7 +835,7 @@
         if (!pasted) return;
         let parsedVersions;
         try { parsedVersions = JSON.parse(pasted); }
-        catch { parsedVersions = pasted.split(/\r?\n/).map(s => s.trim()).filter(Boolean); }
+        catch { parsedVersions = pasted.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean); }
         if (!Array.isArray(parsedVersions) || !parsedVersions.length) {
           content.querySelector('#sp-lib-msg').textContent = 'Could not parse that input.';
           return;
@@ -878,7 +913,8 @@
       function renderTitle() {
         const passed = Object.values(status).filter(s => s === 'passed').length;
         const failed = Object.values(status).filter(s => s === 'failed').length;
-        titleEl.textContent = `Lib Versions (${versions.length} | ✅ ${passed} ❌ ${failed} ⬜ ${versions.length - passed - failed})`;
+        const remaining = versions.length - passed - failed;
+        titleEl.textContent = `${versions.length} Libs Loaded — ✅ ${passed} Passed   ❌ ${failed} Failed   ⬜ ${remaining} Left`;
       }
 
       function renderSuggestion() {
@@ -981,9 +1017,9 @@
           tdStatus.className = 'status-cell';
 
           const passBtn = document.createElement('button');
-          passBtn.textContent = 'Pass';
+          passBtn.textContent = 'PASSED';
           const failBtn = document.createElement('button');
-          failBtn.textContent = 'Fail';
+          failBtn.textContent = 'FAILED';
           if (st === 'passed') passBtn.classList.add('active');
           if (st === 'failed') failBtn.classList.add('active');
 
